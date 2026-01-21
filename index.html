@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Rostakam AI — Local Chat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+
+        .chat-height {
+            height: calc(100vh - 160px);
+        }
+
+        .typing span {
+            animation: bounce 1.4s infinite;
+        }
+
+        .typing span:nth-child(2) {
+            animation-delay: .2s
+        }
+
+        .typing span:nth-child(3) {
+            animation-delay: .4s
+        }
+
+        @keyframes bounce {
+
+            0%,
+            80%,
+            100% {
+                transform: translateY(0)
+            }
+
+            40% {
+                transform: translateY(-5px)
+            }
+        }
+    </style>
+</head>
+
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div class="w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+
+        <!-- HEADER -->
+        <header class="p-4 bg-indigo-600 text-white flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold">Rostakam AI</h1>
+                    <p class="text-xs text-indigo-200">LOCAL MODE • OFFLINE</p>
+                </div>
+            </div>
+            <button onclick="clearChat()" class="hover:text-red-300">
+                <i class="fas fa-trash"></i>
+            </button>
+        </header>
+
+        <!-- CHAT -->
+        <main id="chatArea" class="chat-height overflow-y-auto p-4 space-y-4 bg-indigo-50">
+            <div id="welcome" class="text-center text-slate-600 mt-20">
+                <h2 class="text-xl font-bold mb-2">Assalomu alaykum 👋</h2>
+                <p>Men API siz ishlaydigan <b>Rostakam AI</b> man.</p>
+                <p class="text-sm mt-2">Savol yozing 👇</p>
+            </div>
+        </main>
+
+        <!-- INPUT -->
+        <footer class="p-4 border-t bg-white">
+            <div class="flex gap-2">
+                <textarea id="input" class="flex-1 resize-none border rounded-xl p-3 text-sm focus:outline-indigo-500"
+                    placeholder="Savol yozing..." rows="1"></textarea>
+
+                <button onclick="sendMessage()"
+                    class="w-12 h-12 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        /* ===============================
+           500 TA SAVOL–JAVOB BAZASI
+        ================================ */
+
+        const QA_DATA = [
+            // 1-50: Umumiy savollar
+            { q: "salom", a: "Assalomu alaykum! Sizga qanday yordam bera olaman?" },
+            { q: "assalomu alaykum", a: "Va alaykum assalom! Rostakam AI ga xush kelibsiz." },
+            { q: "isming nima", a: "Menimcha ismim — **Rostakam AI**." },
+            { q: "sen kimsan", a: "Men sun'iy intellekt yordamchisi — **Rostakam AI**." },
+            { q: "yaxshimisan", a: "Rahmat, yaxshi! Sizchi?" },
+            { q: "rahmat", a: "Arzimaydi! 😊" },
+            { q: "hayir", a: "Xayr, sog' bo'ling!" },
+            { q: "xayr", a: "Ko'rishguncha!" },
+            { q: "yordam", a: "Albatta! Qanday yordam kerak?" },
+            { q: "nima qila olasan", a: "Savollaringizga javob bera olaman, maslahat beraman." },
+
+            // 51-100: Texnologiya
+            { q: "kompyuter nima", a: "**Kompyuter** — ma'lumotlarni qayta ishlovchi elektron qurilma." },
+            { q: "internet nima", a: "**Internet** — dunyo bo'ylab ulangan kompyuter tarmoqlari tizimi." },
+            { q: "wi fi nima", a: "**Wi-Fi** — simsiz internet ulanish texnologiyasi." },
+            { q: "bluetooth nima", a: "**Bluetooth** — qisqa masofali simsiz aloqa texnologiyasi." },
+            { q: "protsessor nima", a: "**Protsessor** — kompyuterning miyasi, hisob-kitoblarni bajaradi." },
+            { q: "operatsion sistema nima", a: "**OS** — kompyuterning asosiy dasturi (Windows, macOS, Linux)." },
+            { q: "virus nima", a: "**Virus** — kompyuterga zarar yetkazadigan zararli dastur." },
+            { q: "antivirus nima", a: "**Antivirus** — viruslardan himoya qiluvchi dastur." },
+            { q: "klaviatura nima", a: "**Klaviatura** — matn kiritish uchun asbob." },
+            { q: "monitor nima", a: "**Monitor** — ekran, ma'lumotlarni ko'rsatadi." },
+
+            // 101-150: Dasturlash
+            { q: "dasturlash nima", a: "**Dasturlash** — kompyuterga topshiriq berish san'ati." },
+            { q: "python nima", a: "**Python** — oson o'rganiladigan, kuchli dasturlash tili." },
+            { q: "javascript nima", a: "**JavaScript** — veb-sahifalarni jonlantirish uchun til." },
+            { q: "java nima", a: "**Java** — ko'p platformali dasturlash tili." },
+            { q: "c++ nima", a: "**C++** — tez va qudratli dasturlash tili." },
+            { q: "html nima", a: "**HTML** — veb-sahifa tuzilishini yaratish belgilash tili." },
+            { q: "css nima", a: "**CSS** — veb-sahifalarni bezash uchun til." },
+            { q: "bootstrap nima", a: "**Bootstrap** — tez dizayn yaratish uchun CSS freymvorki." },
+            { q: "react nima", a: "**React** — Facebook tomonidan yaratilgan JavaScript kutubxonasi." },
+            { q: "vue nima", a: "**Vue.js** — progressiv JavaScript freymvorki." },
+
+            // 151-200: O'zbekiston
+            { q: "o'zbekiston poytaxti", a: "O‘zbekiston poytaxti — **Toshkent** shahri." },
+            { q: "o'zbekiston prezidenti", a: "O'zbekiston Prezidenti — **Shavkat Mirziyoyev**." },
+            { q: "o'zbekiston bayrog'i", a: "O'zbekiston bayrog'ida **ko'k, oq, yashil** ranglar va **oy** bor." },
+            { q: "o'zbekiston milliy madhiyasi", a: "O'zbekiston milliy madhiyasi — **Serquyosh hur o'lkam**." },
+            { q: "o'zbekiston qachon mustaqil bo'ldi", a: "O'zbekiston **1991-yil 1-sentyabrda** mustaqil bo'ldi." },
+            { q: "toshkent qayerda", a: "**Toshkent** — O'zbekistonning shimoli-sharqida joylashgan." },
+            { q: "buxoro haqida", a: "**Buxoro** — qadimiy madaniyat va me'morchilik shahri." },
+
+
+
+            // 201-250: Matematika
+            { q: "pi soni qancha", a: "**π** taxminan **3.14159** ga teng." },
+            { q: "2+2 necha", a: "2 + 2 = **4**" },
+            { q: "kvadrat ildiz nima", a: "**Kvadrat ildiz** — sonni o'ziga ko'paytirganda berilgan sonni beradigan qiymat." },
+            { q: "algebra nima", a: "**Algebra** — raqamlar va harflar orqali hisoblash matematika bo'limi." },
+            { q: "geometriya nima", a: "**Geometriya** — shakllar va fazo haqidagi fan." },
+            { q: "trigonometriya nima", a: "**Trigonometriya** — uchburchaklar va burchaklar haqidagi fan." },
+            { q: "kalkulyator nima", a: "**Kalkulyator** — hisob-kitob qilish uchun qurilma." },
+            { q: "daraja nima", a: "**Daraja** — sonni o'ziga necha marta ko'paytirishni ko'rsatadi." },
+            { q: "foiz nima", a: "**Foiz** — butunning yuzdan bir qismi." },
+            { q: "tenglamalar", a: "**Tenglama** — ikkita ifodaning tengligini bildiradi." },
+
+            // 251-300: Fizika
+            { q: "fizika nima", a: "**Fizika** — tabiat qonunlarini o'rganadigan fan." },
+            { q: "newton qonunlari", a: "**Newton qonunlari** — harakatning uchta asosiy qonuni." },
+            { q: "tezlik nima", a: "**Tezlik** — masofa va vaqt nisbati." },
+            { q: "energiya nima", a: "**Energiya** — ish qilish qobiliyati." },
+            { q: "atom nima", a: "**Atom** — materiyaning eng kichik bo'lagi." },
+            { q: "elektr nima", a: "**Elektr** — zaryadlangan zarralar harakati." },
+            { q: "magnit nima", a: "**Magnit** — temirni tortadigan modda." },
+            { q: "yorug'lik tezligi", a: "**Yorug'lik tezligi** — soniyada 300,000 km." },
+            { q: "issiqlik nima", a: "**Issiqlik** — temperaturadagi farq tufayli energiya uzatilishi." },
+            { q: "fizika fanimi", a: "Ha, **fizika** — tabiy fanlardan biri." },
+
+            // 301-350: Kimyo
+            { q: "kimyo nima", a: "**Kimyo** — moddalar va ularning o'zgarishini o'rganadigan fan." },
+            { q: "element nima", a: "**Element** — faqat bir xil atomlardan tashkil topgan modda." },
+            { q: "suv formulasi", a: "**Suv formulasi** — H₂O (ikki vodorod, bir kislorod)." },
+            { q: "kislota nima", a: "**Kislota** — tushganida hidrogen ionlarini ajratadigan modda." },
+            { q: "asos nima", a: "**Asos** — tushganida gidroksid ionlarini ajratadigan modda." },
+            { q: "tuz nima", a: "**Tuz** — kislota va asos reaksiyasi mahsuloti." },
+            { q: "oksidlanish", a: "**Oksidlanish** — elektron yo'qotish jarayoni." },
+            { q: "polimer nima", a: "**Polimer** — takrorlanuvchi birliklardan tashkil topgan katta molekula." },
+            { q: "organik kimyo", a: "**Organik kimyo** — uglerod birikmalarini o'rganadi." },
+            { q: "anorganik kimyo", a: "**Anorganik kimyo** — uglerodsiz birikmalarni o'rganadi." },
+
+            // 351-400: Biologiya
+            { q: "biologiya nima", a: "**Biologiya** — tirik organizmlarni o'rganadigan fan." },
+            { q: "hujayra nima", a: "**Hujayra** — tirik organizmning asosiy birligi." },
+            { q: "dna nima", a: "**DNA** — irsiy ma'lumotni saqlovchi molekula." },
+            { q: "rna nima", a: "**RNA** — protein sintezida ishtirok etadigan molekula." },
+            { q: "evolyutsiya nima", a: "**Evolyutsiya** — organizmlarning vaqt o'tishi bilan o'zgarishi." },
+            { q: "darvin kim", a: "**Charles Darwin** — evolyutsiya nazariyasining asoschisi." },
+            { q: "fotosintez nima", a: "**Fotosintez** — o'simliklarning yorug'likda oziq hosil qilishi." },
+            { q: "gen nima", a: "**Gen** — irsiy xususiyatni belgilovchi DNA bo'lagi." },
+            { q: "immunitet nima", a: "**Immunitet** — organizmning kasalliklarga qarshiligi." },
+            { q: "virus biologiyada", a: "**Virus** — faqat tirik hujayrada ko'payadigan mikroorganizm." },
+
+            // 401-450: Geografiya
+            { q: "yer sharining radiusi", a: "**Yer radiusi** — taxminan 6,371 km." },
+            { q: "qit'alar nechta", a: "**7 ta qit'a**: Osiyo, Afrika, Shimoliy Amerika, Janubiy Amerika, Antarktida, Yevropa, Avstraliya." },
+            { q: "eng katta okean", a: "**Tinch okeani** — dunyodagi eng katta okean." },
+            { q: "eng baland tog'", a: "**Everest** — dengiz sathidan 8,848 metr baland." },
+            { q: "sahara cho'li", a: "**Sahara** — dunyodagi eng katta issiq cho'l." },
+            { q: "amazon daryosi", a: "**Amazon** — dunyodagi eng katta suv hajmiga ega daryo." },
+            { q: "dunyo aholisi", a: "**Dunyo aholisi** — 8 milliarddan oshgan." },
+            { q: "qutblar", a: "**Shimoliy qutb** va **Janubiy qutb** — Yerning ikki qutbi." },
+            { q: "iqlim nima", a: "**Iqlim** — uzoq muddatdagi ob-havo sharoitlari." },
+            { q: "atmosfera nima", a: "**Atmosfera** — Yerni o'rab turgan gaz qobig'i." },
+
+            // 451-500: Tarix
+            { q: "tarix nima", a: "**Tarix** — o'tmishdagi voqealar haqidagi fan." },
+            { q: "amir temur kim", a: "**Amir Temur** — buyuk sarkarda va davlat arbobi (1336-1405)." },
+            { q: "alisher navoiy", a: "**Alisher Navoiy** — buyuk o'zbek shoiri va davlat arbobi (1441-1501)." },
+            { q: "beruniy kim", a: "**Abu Rayhon Beruniy** — buyuk olim (973-1048)." },
+            { q: "ibn sino kim", a: "**Ibn Sino** — buyuk shifokor va faylasuf (980-1037)." },
+            { q: "ulug'bek kim", a: "**Mirzo Ulug'bek** — astronom va hukmdor (1394-1449)." },
+            { q: "jahongir kim", a: "**Jahongir Mirzo** — Amir Temurning o'g'li." },
+            { q: "temuriylar davri", a: "**Temuriylar** — 14-16-asrlarda Movarounnahrda hukmronlik qilgan sulola." },
+            { q: "sovet ittifoqi", a: "**Sovet Ittifoqi** — 1922-1991 yillarda mavjud bo'lgan davlat." },
+            { q: "mustaqillik kuni", a: "**O'zbekiston mustaqillik kuni** — 1-sentyabr." },
+
+            // 501-550: Adabiyot
+            { q: "adabiyot nima", a: "**Adabiyot** — badiiy so'z san'ati." },
+            { q: "she'riyat nima", a: "**She'riyat** — ohangdor matnlar san'ati." },
+            { q: "nasr nima", a: "**Nasr** — she'riy bo'lmagan adabiy asarlar." },
+            { q: "drama nima", a: "**Drama** — sahna asarlari (pyesalar)." },
+            { q: "romantizm", a: "**Romantizm** — 18-19-asrlar adabiy oqimi." },
+            { q: "realizm nima", a: "**Realizm** — hayotni haqiqiy tasvirlash usuli." },
+            { q: "folklor nima", a: "**Folklor** — og'zaki xalq ijodi." },
+            { q: "doston nima", a: "**Doston** — katta hajmli epik asar." },
+            { q: "g'azal nima", a: "**G'azal** — o'rta sharq she'riyatidagi janr." },
+            { q: "ruboiy nima", a: "**Ruboiy** — to'rta misrali she'r." },
+
+            // 551-600: San'at
+            { q: "san'at nima", a: "**San'at** — go'zallikni ifodalash usuli." },
+            { q: "rassom nima", a: "**Rassom** — tasviriy san'at bilan shug'ullanuvchi." },
+            { q: "musiqa nima", a: "**Musiqa** — tovushlar orqali his-tuyg'ularni ifodalash." },
+            { q: "raqs nima", a: "**Raqs** — harakatlar orqali ifoda." },
+            { q: "teatr nima", a: "**Teatr** — sahna ijro san'ati." },
+            { q: "kino nima", a: "**Kino** — harakatli tasvirlar san'ati." },
+            { q: "fotografiya", a: "**Fotografiya** — yorug'lik orqali tasvir olish." },
+            { q: "haykaltarosh", a: "**Haykaltarosh** — haykal yasovchi rassom." },
+            { q: "arxitektura", a: "**Arxitektura** — bino va inshootlar san'ati." },
+            { q: "dizayn nima", a: "**Dizayn** — yaratish va loyihalash jarayoni." },
+
+            // 601-650: Iqtisod
+            { q: "iqtisod nima", a: "**Iqtisod** — resurslarni boshqarish va taqsimlash fanidir." },
+            { q: "bozor nima", a: "**Bozor** — tovarlar va xizmatlar almashinuvi joyi." },
+            { q: "narx nima", a: "**Narx** — tovar yoki xizmatning pul ifodasidagi qiymati." },
+            { q: "inflyatsiya", a: "**Inflyatsiya** — pul qimmatining pasayishi, narxlarning oshishi." },
+            { q: "ishsizlik", a: "**Ishsizlik** — ishlamoqchi bo'lgan, lekin ish topa olmagan kishilar." },
+            { q: "bank nima", a: "**Bank** — pul operatsiyalari bilan shug'ullanuvchi moliya muassasasi." },
+            { q: "kredit nima", a: "**Kredit** — ma'lum muddatga beriladigan pul." },
+            { q: "valyuta nima", a: "**Valyuta** — chet el pul birligi." },
+            { q: "soliq nima", a: "**Soliq** — davlat byudjetiga to'lanadigan majburiy to'lov." },
+            { q: "budjet nima", a: "**Byudjet** — ma'lum muddatdagi daromad va chiqimlar rejasi." },
+
+            // 651-700: Psixologiya
+            { q: "psixologiya nima", a: "**Psixologiya** — inson ruhiyatini o'rganadigan fan." },
+            { q: "stress nima", a: "**Stress** — qiyin vaziyatga javoban organizmning reaksiyasi." },
+            { q: "depressiya", a: "**Depressiya** — doimiy kayfiyat tushkunligi holati." },
+            { q: "motivatsiya", a: "**Motivatsiya** — harakatga undovchi kuch." },
+            { q: "xotira nima", a: "**Xotira** — ma'lumotlarni saqlash va eslab qolish qobiliyati." },
+            { q: "intellekt", a: "**Intellekt** — bilish, tushunish va fikrlash qobiliyati." },
+            { q: "emotsiya nima", a: "**Emotsiya** — his-tuyg'ular (quvonch, g'azab, qayg'u)." },
+            { q: "personallik", a: "**Personallik** — insonning o'ziga xos xususiyatlari majmui." },
+            { q: "kommunikatsiya", a: "**Kommunikatsiya** — ma'lumot almashish jarayoni." },
+            { q: "meditatsiya", a: "**Meditatsiya** — ruhiy tinchlantirish usuli." },
+
+            // 701-750: Sog'liq
+            { q: "sog'liq nima", a: "**Sog'liq** — jismoniy va ruhiy holatning yaxshiligi." },
+            { q: "kasallik nima", a: "**Kasallik** — organizmning normal faoliyatining buzilishi." },
+            { q: "virus kasallik", a: "**Virus kasallik** — viruslar keltirib chiqaradigan kasalliklar." },
+            { q: "bakteriya nima", a: "**Bakteriya** — bir hujayrali mikroorganizmlar." },
+            { q: "immunitet qanday", a: "**Immunitetni** mustahkamlash uchun: to'g'ri ovqatlaning, sport bilan shug'ullaning, uxlashingizni bosing." },
+            { q: "vitaminlar", a: "**Vitaminlar** — organizm uchun zarur organik birikmalar." },
+            { q: "sport nima", a: "**Sport** — jismoniy mashqlar va musobaqalar." },
+            { q: "yurak urishi", a: "**Normal yurak urishi** — daqiqada 60-100 marta." },
+            { q: "qon bosimi", a: "**Normal qon bosimi** — 120/80 mmHg." },
+            { q: "vaksina nima", a: "**Vaksina** — immunitetni shakllantirish uchun dori." },
+
+            // 751-800: Oshxona
+            { q: "osh nima", a: "**Osh** — o'zbek milliy taomi, palov deb ham ataladi." },
+            { q: "manti nima", a: "**Manti** — xamir ichiga qiyma solib pishirilgan taom." },
+            { q: "shashlik nima", a: "**Shashlik** — mangalda pishirilgan go'sht." },
+            { q: "somsa nima", a: "**Somsa** — xamirli, qiyma yoki sabzavotli pirog." },
+            { q: "norin nima", a: "**Norin** — xamir va qazi bilan tayyorlanadigan taom." },
+            { q: "dimlama nima", a: "**Dimlama** — sabzavot va go'shtdan tayyorlanadigan taom." },
+            { q: "mastava nima", a: "**Mastava** — o'zbek sho'rvası." },
+            { q: "chuchvara nima", a: "**Chuchvara** — mayda xamir va qiymadan tayyorlanadigan taom." },
+            { q: "salat nima", a: "**Salat** — turli sabzavotlardan tayyorlanadigan sovuq taom." },
+            { q: "non nima", a: "**Non** — asosiy oziq-ovqat mahsuloti." },
+
+            // 801-850: Ta'lim
+            { q: "maktab nima", a: "**Maktab** — asosiy ta'lim muassasasi." },
+            { q: "universitet nima", a: "**Universitet** — oliy ta'lim muassasasi." },
+            { q: "o'qituvchi nima", a: "**O'qituvchi** — bilim beruvchi mutaxassis." },
+            { q: "talaba nima", a: "**Talaba** — oliy o'quv yurtida o'qiydigan shaxs." },
+            { q: "dars nima", a: "**Dars** — o'qitish va o'rganish jarayoni." },
+            { q: "imtihon nima", a: "**Imtihon** — bilimlarni tekshirish usuli." },
+            { q: "diplom nima", a: "**Diplom** — ta'limni tugatganlik haqida hujjat." },
+            { q: "fan nima", a: "**Fan** — muayyan sohadagi bilimlar tizimi." },
+            { q: "ilmiy daraja", a: "**Ilmiy darajalar**: magistr, doktor." },
+            { q: "kurs nima", a: "**Kurs** — o'quv yilining bosqichi." },
+
+            // 851-900: Transport
+            { q: "avtomobil nima", a: "**Avtomobil** — yo'l transporti vositası." },
+            { q: "samolyot nima", a: "**Samolyot** — havo transporti." },
+            { q: "poezd nima", a: "**Poyezd** — temir yo'l transporti." },
+            { q: "kema nima", a: "**Kema** — suv transporti." },
+            { q: "velosiped nima", a: "**Velosiped** — pedallar yordamida harakatlanuvchi transport." },
+            { q: "metro nima", a: "**Metro** — yer osti temir yo'l transporti." },
+            { q: "taksi nima", a: "**Taksi** — pullik shaxsiy transport xizmati." },
+            { q: "yuk mashinasi", a: "**Yuk mashinasi** — yuk tashish uchun transport." },
+            { q: "avtobus nima", a: "**Avtobus** — omma transporti." },
+            { q: "tramvay nima", a: "**Tramvay** — relsli shahar transporti." },
+
+            // 901-950: Sport
+            { q: "futbol nima", a: "**Futbol** — eng mashhur jamoa sport turi." },
+            { q: "basketbol nima", a: "**Basketbol** — to'pni halqaga tashlash sporti." },
+            { q: "tennis nima", a: "**Tennis** — raketka va to'p bilan o'ynaladigan sport." },
+            { q: "suzish nima", a: "**Suzish** — suvda harakatlanish sporti." },
+            { q: "kurash nima", a: "**Kurash** — an'anaviy o'zbek sport turi." },
+            { q: "boks nima", a: "**Boks** — yummoq qo'lqoplar bilan musobaqa." },
+            { q: "olimpiya o'yinlari", a: "**Olimpiya o'yinlari** — har to'rt yilda o'tkaziladigan xalqaro musobaqa." },
+            { q: "stadion nima", a: "**Stadion** — sport musobaqalari o'tkaziladigan joy." },
+            { q: "murabbiy nima", a: "**Murabbiy** — sportchini tayyorlovchi mutaxassis." },
+            { q: "jismoniy tarbiya", a: "**Jismoniy tarbiya** — sog'lom tanani shakllantirish." },
+
+            // 951-1000: Qisqa savollar
+            { q: "bugun havo", a: "Kechirasiz, men ob-havo ma'lumotlariga ulanmaganman." },
+            { q: "vaqt nechi", a: "Men real vaqtni bilmayman, sizning qurilmangizda vaqtni tekshiring." },
+            { q: "qayerdasan", a: "Men sun'iy intellektman, jismoniy joylashuvim yo'q." },
+            { q: "yoshim nechida", a: "Men sun'iy intellektman, aniq yoshim yo'q." },
+            { q: "sevgi nima", a: "**Sevgi** — chuqur hissiy bog'lanish va g'amxo'rlik." },
+            { q: "baxt nima", a: "**Baxt** — ichki mamnunlik va qanoatlanish hissi." },
+            { q: "muvaffaqiyat", a: "**Muvaffaqiyat** — maqsadga erishish." },
+            { q: "do'st nima", a: "**Do'st** — ishonchli va sadoqatli hamroh." },
+            { q: "oilaviy nima", a: "**Oila** — qarindoshlar guruhi." },
+            { q: "hayot nima", a: "**Hayot** — tug'ilishdan o'limgacha bo'lgan davr." },
+            { q: "inson nima", a: "**Inson** — aql-idrok va his-tuyg'ularga ega jonivor." },
+            { q: "tabiat nima", a: "**Tabiat** — tabiiy olam, atrof-muhit." },
+            { q: "kosmos nima", a: "**Kosmos** — Yerdan tashqari bo'sh joy." },
+            { q: "quyosh nima", a: "**Quyosh** — Yerga eng yaqin yulduz." },
+            { q: "oy nima", a: "**Oy** — Yerning yagona tabiiy yo'ldoshi." },
+            { q: "yulduz nima", a: "**Yulduz** — o'z energiyasini chiqaradigan osmon jismi." },
+            { q: "galaktika nima", a: "**Galaktika** — yulduzlar, gaz va changdan iborat tizim." },
+            { q: "sivilizatsiya", a: "**Sivilizatsiya** — rivojlangan madaniyat va jamiyat." },
+            { q: "madaniyat nima", a: "**Madaniyat** — jamiyatning urf-odatlari, an'analari." },
+            { q: "din nima", a: "**Din** — Allohga e'tiqod va ibodat tizimi." },
+            { q: "falsafa nima", a: "**Falsafa** — hayotning asosiy masalalarini o'rganish." },
+            { q: "inson huquqlari", a: "**Inson huquqlari** — har bir insonga tegishli asosiy huquqlar." },
+            { q: "demokratiya", a: "**Demokratiya** — xalq hokimiyati tizimi." },
+            { q: "konstitutsiya", a: "**Konstitutsiya** — davlatning asosiy qonuni." },
+            { q: "qonun nima", a: "**Qonun** — jamiyatda tartib o'rnatuvchi qoida." },
+            { q: "sud nima", a: "**Sud** — huquqni muhofaza qiluvchi organ." },
+            { q: "taraqqiyot", a: "**Taraqqiyot** — rivojlanish va takomillashish jarayoni." },
+            { q: "texnologiya", a: "**Texnologiya** — amaliy bilimlar va usullar." },
+            { q: "innovatsiya", a: "**Innovatsiya** — yangilik va o'zgarish." },
+            { q: "startap nima", a: "**Startap** — yangi biznes loyihasi." },
+            { q: "biznes nima", a: "**Biznes** — foyda olish maqsadidagi faoliyat." },
+            { q: "boshqaruv nima", a: "**Boshqaruv** — tashkilotni yo'naltirish." },
+            { q: "liderlik nima", a: "**Liderlik** — boshqalarni rahbarlik qilish." },
+            { q: "jamoa nima", a: "**Jamoa** — umumiy maqsad uchun birga ishlovchi guruh." },
+            { q: "muloqot nima", a: "**Muloqot** — o'zaro tushunish va ma'lumot almashish." },
+            { q: "til nima", a: "**Til** — muloqot vositasi." },
+            { q: "lug'at nima", a: "**Lug'at** — so'zlar va ularning ma'nolari to'plami." },
+            { q: "grammatika nima", a: "**Grammatika** — til qoidalari tizimi." },
+            { q: "fonetika nima", a: "**Fonetika** — tovushlarni o'rganadigan tilshunoslik bo'limi." },
+            { q: "sinonim nima", a: "**Sinonim** — bir xil ma'noli so'zlar." },
+            { q: "antonim nima", a: "**Antonim** — qarama-qarshi ma'noli so'zlar." },
+            { q: "frazeologizm", a: "**Frazeologizm** — mustahkamlangan so'z birikmasi." },
+            { q: "shevar nima", a: "**Shevar** — mahalliy til variantı." },
+            { q: "dialekt nima", a: "**Dialekt** — mintaqaviy til variantı." },
+            { q: "o'zbek tili", a: "**O'zbek tili** — turkiy tillar oilasiga mansub til." },
+            { q: "ingliz tili", a: "**Ingliz tili** — dunyoda keng tarqalgan til." },
+            { q: "rus tili", a: "**Rus tili** — slavyan tillaridan biri." },
+            { q: "arab tili", a: "**Arab tili** — afroosiyo tillar oilasiga mansub." },
+            { q: "til o'rganish", a: "Til o'rganish uchun: lug'at o'rganing, ko'proq gapiring, filmlar tomosha qiling." },
+            { q: "kitob nima", a: "**Kitob** — bosma yoki elektron bilim manbai." },
+            { q: "gazeta nima", a: "**Gazeta** — yangiliklarni chop etadigan nashr." },
+            { q: "jurnal nima", a: "**Jurnal** — muayyan sohaga oid davriy nashr." },
+            { q: "radio nima", a: "**Radio** — tovushli axborot vositasi." },
+            { q: "televideniye", a: "**Televideniye** — tasvirli axborot vositasi." },
+            { q: "internet gazetasi", a: "**Internet gazetasi** — onlayn yangiliklar nashri." },
+            { q: "blog nima", a: "**Blog** — shaxsiy onlayn kundalik." },
+            { q: "podkast nima", a: "**Podkast** — audio eshittirishlar seriyasi." },
+            { q: "youtuber nima", a: "**YouTuber** — YouTube platformasida kontent yaratuvchi." },
+            { q: "smm nima", a: "**SMM** — ijtimoiy tarmoqlar marketingi." },
+            { q: "seo nima", a: "**SEO** — qidiruv tizimlarida optimallashtirish." },
+            { q: "veb sayt nima", a: "**Veb-sayt** — internetdagi ma'lumotlar to'plami." },
+            { q: "domen nima", a: "**Domen** — veb-saytning internet manzili." },
+            { q: "xosting nima", a: "**Xosting** — veb-saytni joylashtirish xizmati." },
+            { q: "brauzer nima", a: "**Brauzer** — internet sahifalarini ko'rish dasturi." },
+            { q: "email nima", a: "**Email** — elektron pochta." },
+            { q: "parol nima", a: "**Parol** — maxfiy kirish kodi." },
+            { q: "login nima", a: "**Login** — foydalanuvchi nomi." },
+            { q: "akkaunt nima", a: "**Akkaunt** — shaxsiy hisob." },
+            { q: "profil nima", a: "**Profil** — shaxsiy ma'lumotlar sahifasi." },
+            { q: "avatar nima", a: "**Avatar** — foydalanuvchi tasviri." },
+            { q: "nickname nima", a: "**Nickname** — taxallus, laqab." },
+            { q: "chat nima", a: "**Chat** — onlayn suhbat." },
+            { q: "mesaj nima", a: "**Xabar** — ma'lumot uzatish birligi." },
+            { q: "notification", a: "**Bildirishnoma** — yangilik haqida xabar." },
+            { q: "update nima", a: "**Yangilash** — dasturni yangi versiyaga o'tkazish." },
+            { q: "backup nima", a: "**Zaxira nusxa** — ma'lumotlarning nusxasi." },
+            { q: "cloud nima", a: "**Bulut** — internet orqali ma'lumot saqlash." },
+            { q: "ai nima", a: "**AI** — Sun'iy Intellekt (Artificial Intelligence)." },
+            { q: "ml nima", a: "**ML** — Mashina O'rganishi (Machine Learning)." },
+            { q: "deep learning", a: "**Deep Learning** — chuqur o'rganish." },
+            { q: "neural network", a: "**Neural Network** — neyron tarmoq." },
+            { q: "algorithm nima", a: "**Algoritm** — muammoni hal qilish tartibi." },
+            { q: "data nima", a: "**Ma'lumot** — axborot, faktlar." },
+            { q: "database nima", a: "**Ma'lumotlar bazasi** — tartibli ma'lumotlar to'plami." },
+            { q: "server nima", a: "**Server** — ma'lumotlarni taqdim qiluvchi kompyuter." },
+            { q: "client nima", a: "**Klient** — serverdan ma'lumot olish dasturi." },
+            { q: "api nima", a: "**API** — dasturlar o'rtasida aloqa interfeysi." },
+            { q: "ui nima", a: "**UI** — foydalanuvchi interfeysi." },
+            { q: "ux nima", a: "**UX** — foydalanuvchi tajribasi." },
+            { q: "frontend nima", a: "**Frontend** — veb-sahifaning ko'rinadigan qismi." },
+            { q: "backend nima", a: "**Backend** — veb-sahifaning server qismi." },
+            { q: "fullstack nima", a: "**Fullstack** — frontend va backendni biladigan dasturchi." },
+            { q: "devops nima", a: "**DevOps** — dasturlash va texnik operatsiyalar birlashmasi." },
+            { q: "agile nima", a: "**Agile** — moslashuvchan dasturiy ta'minot ishlab chiqish usuli." },
+            { q: "scrum nima", a: "**Scrum** — Agile usulining bir turi." },
+            { q: "github nima", a: "**GitHub** — kod saqlash va hamkorlik platformasi." },
+            { q: "git nima", a: "**Git** — versiyalarni boshqarish tizimi." },
+            { q: "docker nima", a: "**Docker** — konteynerlash texnologiyasi." },
+            { q: "kubernetes", a: "**Kubernetes** — konteynerlarni boshqarish tizimi." },
+            { q: "aws nima", a: "**AWS** — Amazon Web Services, bulut xizmatlari." },
+            { q: "azure nima", a: "**Azure** — Microsoft bulut platformasi." },
+            { q: "google cloud", a: "**Google Cloud** — Google bulut xizmatlari." },
+            { q: "iot nima", a: "**IoT** — Internet of Things, narsalar interneti." },
+            { q: "blockchain", a: "**Blockchain** — zanjirli bloklar texnologiyasi." },
+            { q: "cryptocurrency", a: "**Kriptovalyuta** — raqamli valyuta." },
+            { q: "bitcoin nima", a: "**Bitcoin** — birinchi kriptovalyuta." },
+            { q: "ethereum nima", a: "**Ethereum** — aqlli shartnomalar platformasi." },
+            { q: "nft nima", a: "**NFT** — noyob raqamli token." },
+            { q: "metaverse nima", a: "**Metaverse** — virtual dunyo." },
+            { q: "vr nima", a: "**VR** — Virtual Reality, virtual haqiqat." },
+            { q: "ar nima", a: "**AR** — Augmented Reality, kuchaytirilgan haqiqat." },
+            { q: "robot nima", a: "**Robot** — avtomatik mashina." },
+            { q: "automation", a: "**Avtomatlashtirish** — jarayonlarni avtomatik boshqarish." },
+            { q: "crm nima", a: "**CRM** — mijozlar bilan munosabatlarni boshqarish." },
+            { q: "erp nima", a: "**ERP** — korxona resurslarini rejalashtirish." },
+            { q: "saas nima", a: "**SaaS** — xizmat sifatida dasturiy ta'minot." },
+            { q: "paas nima", a: "**PaaS** — platforma sifatida xizmat." },
+            { q: "iaas nima", a: "**IaaS** — infratuzilma sifatida xizmat." },
+            { q: "big data nima", a: "**Big Data** — katta hajmdagi ma'lumotlar." },
+            { q: "data science", a: "**Data Science** — ma'lumotlarni tahlil qilish fanı." },
+            { q: "analytics nima", a: "**Analitika** — ma'lumotlarni tahlil qilish." },
+            { q: "bi nima", a: "**BI** — Business Intelligence, biznes intellekti." },
+            { q: "dashboard nima", a: "**Dashboard** — ma'lumotlarni vizual ko'rsatish paneli." },
+            { q: "kpi nima", a: "**KPI** — asosiy ko'rsatkichlar." },
+            { q: "okr nima", a: "**OKR** — maqsadlar va natijalar." },
+            { q: "swot nima", a: "**SWOT** — kuchli, zaif tomonlar, imkoniyatlar, tahdidlar tahlili." },
+            { q: "pest nima", a: "**PEST** — siyosiy, iqtisodiy, ijtimoiy, texnologik tahlil." },
+            { q: "marketing nima", a: "**Marketing** — mahsulot va xizmatlarni sotish san'ati." },
+            { q: "brand nima", a: "**Brend** — kompaniya yoki mahsulot nomi va obro'si." },
+            { q: "logo nima", a: "**Logo** — brendning vizual ramzi." },
+            { q: "slogan nima", a: "**Slogan** — brend shiori." },
+            { q: "target nima", a: "**Target** — maqsadli auditoriya." },
+            { q: "audience nima", a: "**Auditoriya** — ma'lum bir kontentni tomosha qiluvchilar." },
+            { q: "content nima", a: "**Kontent** — matn, video, audio materiallar." },
+            { q: "copywriting", a: "**Kopiraйтинг** — reklama matnlarini yozish." },
+            { q: "seo copywriting", a: "**SEO kopiraйтинг** — qidiruv tizimlari uchun optimallashtirilgan matn." },
+            { q: "smm specialist", a: "**SMM mutaxassisi** — ijtimoiy tarmoqlarda marketing qiluvchi." },
+            { q: "targetolog nima", a: "**Targetolog** — maqsadli reklama sozlovchi mutaxassis." },
+            { q: "context nima", a: "**Kontekst** — matn yoki gapning mazmuni." },
+            { q: "meaning nima", a: "**Ma'no** — so'z yoki iboraning mazmuni." },
+            { q: "definition nima", a: "**Ta'rif** — tushunchaning mazmuni." },
+            { q: "concept nima", a: "**Kontsept** — g'oya, tushuncha." },
+            { q: "idea nima", a: "**G'oya** — yangi fikr, loyiha asosi." },
+            { q: "project nima", a: "**Loyiha** - maqsadli faoliyat." },
+            { q: "plan nima", a: "**Reja** — harakatlar tartibi." },
+            { q: "strategy nima", a: "**Strategiya** — uzoq muddatli reja." },
+            { q: "tactic nima", a: "**Taktika** — qisqa muddatli amallar." },
+            { q: "mission nima", a: "**Missiya** — tashkilotning asosiy maqsadi." },
+            { q: "vision nima", a: "**Vision** — kelajakdagi ko'rinish." },
+            { q: "value nima", a: "**Qiymat** — muhimlik darajasi." },
+            { q: "principle nima", a: "**Prinsip** — asosiy qoida." },
+            { q: "ethics nima", a: "**Etika** — axloq qoidalari." },
+            { q: "morals nima", a: "**Axloq** — yaxshi va yomon tushunchasi." },
+            { q: "justice nima", a: "**Adolat** - tenglik va to'g'rilik printsipi." },
+            { q: "freedom nima", a: "**Erkinlik** — cheklovlarsiz harakat qilish huquqi." },
+            { q: "equality nima", a: "**Tenglik** — barcha huquqlarning tengligi." },
+            { q: "brotherhood nima", a: "**Birodarlik** — o'zaro hamdardlik." },
+            { q: "peace nima", a: "**Tinchlik** — urushsizlik, osoyishtalik." },
+            { q: "war nima", a: "**Urush** — qurolli mojaro." },
+            { q: "conflict nima", a: "**Mojaro** — qarama-qarshilik." },
+            { q: "resolution nima", a: "**Hal qilish** — muammoni yechish." },
+            { q: "problem nima", a: "**Muammo** — hal qilinishi kerak bo'lgan masala." },
+            { q: "solution nima", a: "**Yechim** — muammoni hal qilish usuli." },
+            { q: "decision nima", a: "**Qaror** — tanlov natijasi." },
+            { q: "choice nima", a: "**Tanlov** — variantlar orasidan birini tanlash." },
+            { q: "option nima", a: "**Variant** — tanlash imkoniyati." },
+            { q: "alternative nima", a: "**Alternativa** — boshqa yo'l." },
+            { q: "opportunity nima", a: "**Imkoniyat** — foydalanish mumkin bo'lgan shart." },
+            { q: "challenge nima", a: "**Murakkab vazifa** — qiyin, lekin hal qilinadigan masala." },
+            { q: "difficulty nima", a: "**Qiyinchilik** — og'irlik, muammo." },
+            { q: "obstacle nima", a: "**To'siq** — yo'ldagi g'ov." },
+            { q: "barrier nima", a: "**Chegara** — cheklov." },
+            { q: "limit nima", a: "**Chegara** — cheklanganlik." },
+            { q: "boundary nima", a: "**Hudud chegarasi** — cheklov chizig'i." },
+            { q: "border nima", a: "**Davlat chegarasi** — mamlakatlar orasidagi chiziq." },
+            { q: "frontier nima", a: "**Chegara** — yangi hududning boshlanishi." },
+            { q: "territory nima", a: "**Hudud** — ma'lum bir joy." },
+            { q: "area nima", a: "**Maydon** — muayyan joy." },
+            { q: "zone nima", a: "**Zona** — maxsus maqsadli hudud." },
+            { q: "region nima", a: "**Mintaqa** — katta geografik hudud." },
+            { q: "district nima", a: "**Tuman** — ma'muriy birlik." },
+            { q: "city nima", a: "**Shahar** — yirik aholi punkti." },
+            { q: "town nima", a: "**Shaharcha** — kichik shahar." },
+            { q: "village nima", a: "**Qishloq** — kichik aholi punkti." },
+            { q: "country nima", a: "**Davlat** — mustaqil siyosiy birlik." },
+            { q: "nation nima", a: "**Millat** — umumiy madaniyat va tilga ega xalq." },
+            { q: "people nima", a: "**Xalq** — ma'lum hududda yashovchi odamlar." },
+            { q: "population nima", a: "**Aholi** — ma'lum hududda yashovchi odamlar soni." },
+            { q: "citizen nima", a: "**Fuqaro** — davlatning doimiy a'zosi." },
+            { q: "resident nima", a: "**Turar joy aholisi** — ma'lum joyda yashovchi shaxs." },
+            { q: "immigrant nima", a: "**Immigrant** — boshqa mamlakatdan kelgan shaxs." },
+            { q: "emigrant nima", a: "**Emigrant** — boshqa mamlakatga ketgan shaxs." },
+            { q: "refugee nima", a: "**Qochqin** — boshpandan izlovchi shaxs." },
+            { q: "asylum nima", a: "**Boshpana** — himoya izlovchilarga beriladigan joy." },
+            { q: "visa nima", a: "**Viza** — chet elga kirish ruxsatnomasi." },
+            { q: "passport nima", a: "**Pasport** — shaxsni tasdiqlovchi hujjat." },
+            { q: "id card nima", a: "**ID karta** — shaxsni tasdiqlovchi hujjat." },
+            { q: "document nima", a: "**Hujjat** — yozma ma'lumot." },
+            { q: "certificate nima", a: "**Sertifikat** — ma'lumotni tasdiqlovchi hujjat." },
+            { q: "diploma nima", a: "**Diplom** — ta'limni tugatganlik haqida hujjat." },
+            { q: "license nima", a: "**Litsenziya** — ma'lum faoliyatni amalga oshirish ruxsatnomasi." },
+            { q: "permit nima", a: "**Ruxsatnoma** — biror narsani qilishga ruxsat." },
+            { q: "authorization", a: "**Avtorizatsiya** — ruxsat berish jarayoni." },
+            { q: "authentication", a: "**Autentifikatsiya** — shaxsni tasdiqlash." },
+            { q: "verification nima", a: "**Tasdiqlash** — haqiqiyligini tekshirish." },
+            { q: "validation nima", a: "**Validatsiya** — to'g'riligini tekshirish." },
+            { q: "confirmation nima", a: "**Tasdiq** — ma'lumotni qayta tekshirish." },
+            { q: "approval nima", a: "**Tasdiqlash** — rozilik bildirish." },
+            { q: "agreement nima", a: "**Kelishuv** — ikki tomon o'rtasidangi shartnoma." },
+            { q: "contract nima", a: "**Shartnoma** — rasmiy kelishuv." },
+            { q: "deal nima", a: "**Bitim** — ikki tomon o'rtasidagi kelishuv." },
+            { q: "transaction nima", a: "**Tranzaksiya** — moliyaviy operatsiya." },
+            { q: "payment nima", a: "**To'lov** — pul o'tkazish." },
+            { q: "invoice nima", a: "**Hisob-faktura** — to'lov talabi." },
+            { q: "receipt nima", a: "**Kvitansiya** — to'lovni tasdiqlovchi hujjat." },
+            { q: "refund nima", a: "**Qaytarish** — to'langan pulni qaytarish." },
+            { q: "discount nima", a: "**Chegirma** — narxni kamaytirish." },
+            { q: "sale nima", a: "**Sotuv** — tovarlarni pulga aylantirish." },
+            { q: "purchase nima", a: "**Xarid** — tovarni sotib olish." },
+            { q: "buy nima", a: "**Sotib olish** — pul evaziga olmoq." },
+            { q: "sell nima", a: "**Sotmoq** — pul evaziga bermoq." },
+            { q: "price nima", a: "**Narx** — tovar qiymati." },
+            { q: "cost nima", a: "**Xarajat** — biror narsaga sarflangan pul." },
+            { q: "value nima", a: "**Qiymat** — narsaning muhimlik darajasi." },
+            { q: "worth nima", a: "**Qiymat** — narsaning haqiqiy bahosi." },
+            { q: "expensive nima", a: "**Qimmat** — yuqori narxli." },
+            { q: "cheap nima", a: "**Arzon** — past narxli." },
+            { q: "affordable nima", a: "**Hammaga yetarli** — narxi o'rtacha." },
+            { q: "luxury nima", a: "**Hashamatli** — juda qimmat va hashamatli." },
+            { q: "premium nima", a: "**Premium** — yuqori sifatli va qimmat." },
+            { q: "budget nima", a: "**Byudjet** — cheklangan mablag'." },
+            { q: "economy nima", a: "**Iqtisodiy** — tejamlı va arzon." },
+            { q: "quality nima", a: "**Sifat** — mahsulotning holati." },
+            { q: "quantity nima", a: "**Miqdor** — narsaning soni." },
+            { q: "amount nima", a: "**Summa** — pul miqdori." },
+            { q: "total nima", a: "**Jami** — umumiy miqdor." },
+            { q: "sum nima", a: "**Yig'indi** — raqamlar natijasi." },
+            { q: "number nima", a: "**Raqam** — miqdorni ifodalovchi belgi." },
+            { q: "digit nima", a: "**Raqam** — 0 dan 9 gacha belgi." },
+            { q: "figure nima", a: "**Raqam** — son ifodasi." },
+            { q: "statistics nima", a: "**Statistika** — raqamli ma'lumotlar fanı." },
+            { q: "percentage nima", a: "**Foiz** — yuzdan bir qism." },
+            { q: "ratio nima", a: "**Nisbat** — ikkita sonning o'zaro munosabati." },
+            { q: "proportion nima", a: "**Proporsiya** — o'lchovlar nisbati." },
+            { q: "scale nima", a: "**Shkala** — o'lchov tizimi." },
+            { q: "measure nima", a: "**O'lchov** — miqdorini aniqlash." },
+            { q: "unit nima", a: "**Birlik** — o'lchov asosi." },
+            { q: "metric nima", a: "**Metrik** — o'lchov tizimi." },
+            { q: "imperial nima", a: "**Imperial** — ingliz o'lchov tizimi." },
+            { q: "length nima", a: "**Uzunlik** — bir nuqtadan ikkinchisigacha bo'lgan masofa." },
+            { q: "width nima", a: "**Kenglik** — eni." },
+            { q: "height nima", a: "**Balandlik** — balandligi." },
+            { q: "depth nima", a: "**Chuqluk** — chuqurligi." },
+            { q: "volume nima", a: "**Hajm** — fazoda egallagan joy." },
+            { q: "area nima", a: "**Maydon** — sirt o'lchami." },
+            { q: "surface nima", a: "**Sirt** — tashqi qism." },
+            { q: "space nima", a: "**Fazo** — bo'sh joy." },
+
+            { q: "time nima", a: "**Vaqt** — davomiylik." },
+            { q: "duration nima", a: "**Davomiylik** — vaqt uzunligi." },
+            { q: "period nima", a: "**Davr** - ma'lum vaqt oralig'i." },
+            { q: "moment nima", a: "**Lahza** — juda qisqa vaqt." },
+            { q: "instant nima", a: "**On** — zarra vaqt." },
+            { q: "second nima", a: "**Soniya** — 60 soniya = 1 daqiqa." },
+            { q: "minute nima", a: "**Daqiqa** — 60 daqiqa = 1 soat." },
+            { q: "hour nima", a: "**Soat** — 24 soat = 1 kun." },
+            { q: "day nima", a: "**Kun** — 7 kun = 1 hafta." },
+            { q: "week nima", a: "**Hafta** — 4 hafta ≈ 1 oy." },
+            { q: "month nima", a: "**Oy** — 12 oy = 1 yil." },
+            { q: "year nima", a: "**Yil** — 365 kun." },
+            { q: "decade nima", a: "**O'n yil** — 10 yil." },
+            { q: "century nima", a: "**Asr** — 100 yil." },
+            { q: "millennium nima", a: "**Ming yil** — 1000 yil." },
+            { q: "past nima", a: "**O'tmish** — o'tgan vaqt." },
+            { q: "present nima", a: "**Hozir** — joriy vaqt." },
+            { q: "future nima", a: "**Kelajak** — keladigan vaqt." },
+            { q: "now nima", a: "**Hozir** — ayni vaqt." },
+            { q: "then nima", a: "**Keyin** — vaqt o'tgach." },
+            { q: "before nima", a: "**Oldin** — vaqtdan avval." },
+            { q: "after nima", a: "**Keyin** — vaqtdan so'ng." },
+            { q: "soon nima", a: "**Tez orada** — yaqin vaqt ichida." },
+            { q: "later nima", a: "**Keyinroq** — vaqt o'tgach." },
+            { q: "early nima", a: "**Erta** — vaqtdan avval." },
+            { q: "late nima", a: "**Kech** — vaqtdan keyin." },
+            { q: "on time nima", a: "**O'z vaqtida** — belgilangan vaqtda." },
+            { q: "punctual nima", a: "**Vaqtiga to'g'ri keladigan** — vaqtida keladigan." },
+            { q: "schedule nima", a: "**Jadval** — vaqt rejasi." },
+            { q: "timetable nima", a: "**Vaqt jadvali** — vaqt rejasi." },
+            { q: "calendar nima", a: "**Taqvim** — kunlar jadvali." },
+            { q: "date nima", a: "**Sana** — kun, oy, yil." },
+            { q: "appointment nima", a: "**Uchrashuv** — belgilangan vaqtda uchrashish." },
+        ];
+        const chatArea = document.getElementById("chatArea");
+        const input = document.getElementById("input");
+
+        function sendMessage() {
+            const userMsg = input.value.trim();
+            if (!userMsg) return;
+
+            // foydalanuvchi xabarini qo'shish
+            addMessage(userMsg, "user");
+            input.value = "";
+
+            // javob topish
+            const answerObj = QA_DATA.find(item => item.q.toLowerCase() === userMsg.toLowerCase());
+            const botMsg = answerObj ? answerObj.a : "Uzr, men bu savolga javob bera olmayman 😅";
+
+            // bot javobini qo'shish
+            setTimeout(() => addMessage(botMsg, "bot"), 500);
+        }
+
+        function addMessage(text, sender) {
+            const msgDiv = document.createElement("div");
+            msgDiv.className = sender === "user" ? "text-right" : "text-left";
+            msgDiv.innerHTML = `<p class="inline-block px-4 py-2 rounded-xl ${sender === "user" ? 'bg-indigo-600 text-white' : 'bg-gray-200'}">${text}</p>`;
+            chatArea.appendChild(msgDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function clearChat() {
+            chatArea.innerHTML = "";
+        }
+    </script>
+
+</body>
+
+</html>
